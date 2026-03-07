@@ -4,11 +4,10 @@ import matplotlib.patheffects as pe
 import tkinter as tk
 from tkinter import simpledialog
 
-# Sieve prima (Efisien)
+# Sieve of Eratosthenes (Efficient)
 def get_primes_up_to(limit):
     if limit < 2: return []
-    sieve = [True] * (limit + 1
-    )
+    sieve = [True] * (limit + 1)
     sieve[0] = sieve[1] = False
     for i in range(2, int(np.sqrt(limit)) + 1):
         if sieve[i]:
@@ -16,10 +15,10 @@ def get_primes_up_to(limit):
                 sieve[j] = False
     return [i for i in range(2, limit + 1) if sieve[i]]
 
-# MENGGUNAKAN TEORI M ALFA RIDZI: Midpoint m dan Jarak d
+# RIDZI BUTTERFLY THEORY: Midpoint m and Distance d
 def get_symmetric_groups(n, primes_set):
     m = n // 2
-    groups =[]
+    groups = []
     
     for d in range(m - 1):
         p = m - d
@@ -31,32 +30,32 @@ def get_symmetric_groups(n, primes_set):
                 'p': p, 'q': q      
             })
             
-    # Urutkan berdasarkan jarak d ASCENDING 
+    # Sort by distance d ASCENDING 
     groups.sort(key=lambda g: g['d'], reverse=False)
     return groups
 
-# ALGORITMA ASLI: Kristal Lingkaran Nol-Celah (Dengan Modifikasi Anatomi Sayap)
+# ZERO-GAP CIRCULAR CRYSTAL ALGORITHM (With Butterfly Wing Anatomy Modification)
 def calculate_crystal_packing(groups):
     placed_xy = []
-    polygons =[]
+    polygons = []
     max_radius_fit = 0
     eps = 1e-6 
 
     for g in groups:
         p, q, d, is_central = g['p'], g['q'], g['d'], g['is_central']
-        W = 2 * p  # Lebar mutlak (0 Gap)
-        diag_val = 2 * p * np.sqrt(2) # Perhitungan diagonal kupu-kupu (Diagonal Square = W * sqrt(2))
+        W = 2 * p  # Absolute width (0 Gap)
+        diag_val = 2 * p * np.sqrt(2) # Butterfly diagonal calculation (Diagonal Square = W * sqrt(2))
         
-        candidates =[]
+        candidates = []
         
-        # 1. Posisikan Pasangan Pertama
+        # 1. Position First Pair
         if not placed_xy:
             if is_central:
                 candidates.append((0, 0))
             else:
                 candidates.append((W/2, 0))
         else:
-            # 2. Cari titik singgung dari yang sudah ditempatkan
+            # 2. Find tangent points from already placed items
             U_edges = [0.0]
             V_edges = [0.0]
             for P in placed_xy:
@@ -79,7 +78,7 @@ def calculate_crystal_packing(groups):
                     if valid:
                         candidates.append((x_cand, y_cand))
         
-        # 3. Sortir Jarak ke Pusat (Mempertahankan kristal melingkar)
+        # 3. Sort by Distance to Center (Maintaining circular crystal)
         candidates.sort(key=lambda c: (round(c[0]**2 + c[1]**2, 5), round(abs(c[0]), 5), round(abs(c[1]), 5), c[0], c[1]))
         best_x, best_y = candidates[0]
         
@@ -87,8 +86,8 @@ def calculate_crystal_packing(groups):
             nonlocal max_radius_fit
             placed_xy.append({'x': cx, 'y': cy, 'W': W})
             
-            # --- BAGIAN 1: TULANG 'X' ---
-            t = p * 0.22  # Ketebalan tulang
+            # --- PART 1: 'X' BONE ---
+            t = p * 0.22  # Bone thickness
             x_verts = np.array([
                 (p, p), (p-t, p), (0, t), (-p+t, p), (-p, p),
                 (-p, p-t), (-t, 0), (-p, -p+t), (-p, -p),
@@ -101,7 +100,7 @@ def calculate_crystal_packing(groups):
             dist = np.linalg.norm(x_verts, axis=1)
             max_radius_fit = max(max_radius_fit, np.max(dist))
             
-            # --- BAGIAN 2: SAYAP KUPU-KUPU (PARAMETRIK FAY) ---
+            # --- PART 2: BUTTERFLY WINGS (FAY'S PARAMETRIC) ---
             theta = np.linspace(0, 2*np.pi, 200)
             r = np.exp(np.sin(theta)) - 2*np.cos(4*theta) + np.sin((2*theta - np.pi)/24)**5
             
@@ -120,7 +119,7 @@ def calculate_crystal_packing(groups):
                 'cx': cx, 'cy': cy, 'p': p, 'label': label
             })
 
-        # 4. Terapkan Simetri Titik Pusat (-x, -y) dengan label berisi Diagonal Kupu-kupu
+        # 4. Apply Central Point Symmetry (-x, -y) with Butterfly Diagonal in label
         if is_central:
             place_item(best_x, best_y, f"({p},{p})\nd=0\nDg={diag_val:.1f}")
         else:
@@ -132,26 +131,26 @@ def calculate_crystal_packing(groups):
 def plot_fractal_goldbach_crystal(n):
     if n % 2 != 0: n -= 1
     if n < 4:
-        print("n harus bilangan genap >= 4")
+        print("n must be an even number >= 4")
         return
         
     primes = set(get_primes_up_to(n))
     groups = get_symmetric_groups(n, primes)
 
     if not groups: 
-        print(f"Tidak ada partisi Goldbach untuk n={n}")
+        print(f"No Goldbach partitions for n={n}")
         return
 
     m = n // 2
     plt.style.use('dark_background')
     
-    # Rasio window yang lebih lebar untuk menampung UI Teks Panel
+    # Wider window ratio to accommodate Text Panel UI
     fig, ax = plt.subplots(figsize=(16, 10))
     ax.set_aspect('equal')
 
     polygons_data, R_fit = calculate_crystal_packing(groups)
 
-    # Lingkaran Semesta
+    # Universe Circle
     circle = plt.Circle((0, 0), R_fit, color='cyan', fill=False, lw=1.5, alpha=0.5, linestyle='-')
     ax.add_patch(circle)
     
@@ -166,23 +165,23 @@ def plot_fractal_goldbach_crystal(n):
         
         ratio = p / m if m > 0 else 0
         
-        # Gambar Layer Sayap
+        # Draw Wing Layer
         poly_out = plt.Polygon(poly_data['wing_outer'], facecolor=cmap_wing(ratio), edgecolor='none', alpha=0.7)
         ax.add_patch(poly_out)
         
         poly_in = plt.Polygon(poly_data['wing_inner'], facecolor=cmap_core(1.0 - ratio), edgecolor='none', alpha=0.9)
         ax.add_patch(poly_in)
         
-        # Gambar Tulang
+        # Draw Bone
         poly_x = plt.Polygon(poly_data['x_verts'], facecolor='white', edgecolor='cyan', lw=1.2, alpha=0.25)
         ax.add_patch(poly_x)
         
-        # Kotak Pembatas
+        # Bounding Box
         bbox = plt.Rectangle((cx - p, cy - p), 2*p, 2*p, 
                              fill=False, edgecolor='white', lw=0.5, alpha=0.2, linestyle=':')
         ax.add_patch(bbox)
         
-        # Label dengan detail baru
+        # Label with new details
         fontsize = max(4, int((p / m) * 10)) if m > 0 else 6
         ax.text(cx, cy, poly_data['label'], 
                 color='white', ha='center', va='center', 
@@ -200,63 +199,63 @@ def plot_fractal_goldbach_crystal(n):
     ax.text(0, -padding_view * 0.98, f"Deterministic Circular Tangent Packing (0 Gap)\nStructure: 'X' Skeleton with Fay's Butterfly Wings", 
             color='cyan', ha='center', fontsize=12, alpha=0.8)
 
-    # ================= PANEL INFORMASI AKURAT =================
+    # ================= ACCURATE INFORMATION PANEL =================
     d_vals = [g['d'] for g in groups]
     p_vals = [g['p'] for g in groups]
     
     info_text = (
-        f" INFORMASI ANALISIS GOLDBACH\n"
+        f" GOLDBACH ANALYSIS INFORMATION\n"
         f" {'='*34}\n"
-        f" Nilai n (Genap)  : {n}\n"
-        f" Titik Tengah (m) : {m}\n"
-        f" Total Pasangan   : {len(groups)}\n"
+        f" n Value (Even)   : {n}\n"
+        f" Midpoint (m)    : {m}\n"
+        f" Total Pairs     : {len(groups)}\n"
         f" {'='*34}\n\n"
-        f" GEOMETRI LINGKARAN SEMESTA\n"
+        f" UNIVERSE CIRCLE GEOMETRY\n"
         f" {'='*34}\n"
-        f" Jari-jari (R)    : {R_fit:.4f}\n"
-        f" Diameter (D)     : {(2 * R_fit):.4f}\n"
-        f" Keliling Lingk.  : {(2 * np.pi * R_fit):.4f}\n"
-        f" Luas Area Lingk. : {(np.pi * R_fit**2):.4f}\n"
+        f" Radius (R)       : {R_fit:.4f}\n"
+        f" Diameter (D)    : {(2 * R_fit):.4f}\n"
+        f" Circumference   : {(2 * np.pi * R_fit):.4f}\n"
+        f" Circle Area     : {(np.pi * R_fit**2):.4f}\n"
         f" {'='*34}\n\n"
-        f" ANALISIS JARAK & DIAGONAL KUPU\n"
+        f" DISTANCE & BUTTERFLY DIAGONAL ANALYSIS\n"
         f" {'='*34}\n"
-        f" Jarak (d) Min/Max  : {min(d_vals)} / {max(d_vals)}\n"
-        f" Jarak (d) Rata-rata: {(sum(d_vals)/len(d_vals)):.2f}\n\n"
-        f" Sayap Utama Min (p): {min(p_vals)}\n"
-        f" Sayap Utama Max (p): {max(p_vals)}\n"
-        f" Diagonal (Dg) Min  : {(2 * min(p_vals) * np.sqrt(2)):.4f}\n"
-        f" Diagonal (Dg) Max  : {(2 * max(p_vals) * np.sqrt(2)):.4f}\n"
+        f" Distance (d) Min/Max : {min(d_vals)} / {max(d_vals)}\n"
+        f" Distance (d) Average : {(sum(d_vals)/len(d_vals)):.2f}\n\n"
+        f" Main Wing Min (p)   : {min(p_vals)}\n"
+        f" Main Wing Max (p)   : {max(p_vals)}\n"
+        f" Diagonal (Dg) Min    : {(2 * min(p_vals) * np.sqrt(2)):.4f}\n"
+        f" Diagonal (Dg) Max    : {(2 * max(p_vals) * np.sqrt(2)):.4f}\n"
         f" {'='*34}\n\n"
-        f" MAKNA GEOMETRI DALAM GOLDBACH\n"
+        f" GEOMETRIC MEANING IN GOLDBACH\n"
         f" {'='*34}\n"
-        f" - Jarak (d): Simpangan prima dari m.\n"
-        f" - Diagonal (Dg): Bentang mutlak sayap\n"
-        f"   yang melambangkan energi prima p.\n"
-        f" - Diameter (D): Total area probabilitas\n"
-        f"   seluruh sebaran partisi n.\n"
-        f" - 0-Gap: Konsistensi fraktal kristal.\n\n"
-        f" RINCIAN PASANGAN (p, q):\n"
+        f" - Distance (d): Prime deviation from m.\n"
+        f" - Diagonal (Dg): Absolute wing span\n"
+        f"   representing prime p energy.\n"
+        f" - Diameter (D): Total probability area\n"
+        f"   of all n partitions.\n"
+        f" - 0-Gap: Crystal fractal consistency.\n\n"
+        f" PAIR DETAILS (p, q):\n"
         f" {'-'*34}\n"
     )
     
-    # Menampilkan hingga 12 pasangan di tabel panel
+    # Display up to 12 pairs in panel table
     for idx, g in enumerate(groups):
         p, q, d = g['p'], g['q'], g['d']
         diag = 2 * p * np.sqrt(2)
         if idx < 12:
             info_text += f"[{idx+1:02d}] ({p:^4}, {q:^4}) | d={d:<4} | Dg={diag:.1f}\n"
         elif idx == 12:
-            info_text += f" ... dan {len(groups) - 12} pasangan lainnya\n"
+            info_text += f" ... and {len(groups) - 12} more pairs\n"
             break
             
-    # Membuat TextBox Panel di sebelah kiri menggunakan koordinat figure absolut
+    # Create Panel TextBox on the left side using absolute figure coordinates
     fig.text(0.015, 0.5, info_text, 
              fontsize=10, color='white', va='center', ha='left',
              family='monospace',
              bbox=dict(facecolor='#0a192f', alpha=0.85, edgecolor='#00ffcc', boxstyle='round,pad=1', lw=1.5))
     # ==========================================================
 
-    # Menggunakan rect di tight_layout agar plot utama menyisakan area kosong di sebelah kiri
+    # Use rect in tight_layout to leave empty space on the left for main plot
     plt.tight_layout(rect=[0.26, 0.0, 1.0, 1.0])
     plt.show()
 
@@ -271,3 +270,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
