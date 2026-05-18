@@ -39,225 +39,175 @@ def calculate_crystal_packing(groups):
     placed_xy = []
     polygons = []
     max_radius_fit = 0
+    total_square_area = 0
+    contact_points = [] # Melacak titik yang menyentuh radius terluar
     eps = 1e-6 
 
     for g in groups:
         p, q, d, is_central = g['p'], g['q'], g['d'], g['is_central']
-        W = 2 * p  # Absolute width (0 Gap)
-        diag_val = 2 * p * np.sqrt(2) # Butterfly diagonal calculation (Diagonal Square = W * sqrt(2))
+        
+        # Menggunakan skala logaritmik untuk massa (Prime Number Theorem) [cite: 172]
+        W = (2 * p) / np.log(p + 1) 
+        half_w = W / 2
+        diag_val = W * np.sqrt(2)
         
         candidates = []
-        
-        # 1. Position First Pair
         if not placed_xy:
-            if is_central:
-                candidates.append((0, 0))
-            else:
-                candidates.append((W/2, 0))
+            candidates.append((0, 0) if is_central else (half_w, 0))
         else:
-            # 2. Find tangent points from already placed items
-            U_edges = [0.0]
-            V_edges = [0.0]
+            U_edges, V_edges = [0.0], [0.0]
             for P in placed_xy:
-                half = (P['W'] + W) / 2
-                U_edges.extend([P['x'] - half, P['x'] + half])
-                V_edges.extend([P['y'] - half, P['y'] + half])
+                gap_half = (P['W'] + W) / 2
+                U_edges.extend([P['x'] - gap_half, P['x'] + gap_half])
+                V_edges.extend([P['y'] - gap_half, P['y'] + gap_half])
             
             for x_cand in U_edges:
                 for y_cand in V_edges:
-                    if not is_central and max(abs(x_cand), abs(y_cand)) < (W / 2) - eps:
+                    if not is_central and max(abs(x_cand), abs(y_cand)) < half_w - eps:
                         continue
-                        
                     valid = True
                     for P in placed_xy:
-                        half = (P['W'] + W) / 2
-                        if abs(x_cand - P['x']) < half - eps and abs(y_cand - P['y']) < half - eps:
+                        check_w = (P['W'] + W) / 2
+                        if abs(x_cand - P['x']) < check_w - eps and abs(y_cand - P['y']) < check_w - eps:
                             valid = False
                             break
-                    
-                    if valid:
-                        candidates.append((x_cand, y_cand))
+                    if valid: candidates.append((x_cand, y_cand))
         
-        # 3. Sort by Distance to Center (Maintaining circular crystal)
-        candidates.sort(key=lambda c: (round(c[0]**2 + c[1]**2, 5), round(abs(c[0]), 5), round(abs(c[1]), 5), c[0], c[1]))
+        candidates.sort(key=lambda c: (round(c[0]**2 + c[1]**2, 5), round(abs(c[0]), 5)))
         best_x, best_y = candidates[0]
         
         def place_item(cx, cy, label):
-            nonlocal max_radius_fit
+            nonlocal max_radius_fit, total_square_area
             placed_xy.append({'x': cx, 'y': cy, 'W': W})
             
-            # --- PART 1: 'X' BONE ---
-            t = p * 0.22  # Bone thickness
-            x_verts = np.array([
-                (p, p), (p-t, p), (0, t), (-p+t, p), (-p, p),
-                (-p, p-t), (-t, 0), (-p, -p+t), (-p, -p),
-                (-p+t, -p), (0, -t), (p-t, -p), (p, -p),
-                (p, -p+t), (t, 0), (p, p-t)
-            ])
-            x_verts[:, 0] += cx
-            x_verts[:, 1] += cy
+            # --- ANALISIS TITIK KONTAK (SUDUT PERSEGI) ---
+            # Setiap persegi memiliki 4 sudut. Kita cari yang terjauh dari pusat.
+            corners = [
+                (cx + half_w, cy + half_w), (cx - half_w, cy + half_w),
+                (cx + half_w, cy - half_w), (cx - half_w, cy - half_w)
+            ]
             
-            dist = np.linalg.norm(x_verts, axis=1)
-            max_radius_fit = max(max_radius_fit, np.max(dist))
-            
-            # --- PART 2: BUTTERFLY WINGS (FAY'S PARAMETRIC) ---
-            theta = np.linspace(0, 2*np.pi, 200)
-            r = np.exp(np.sin(theta)) - 2*np.cos(4*theta) + np.sin((2*theta - np.pi)/24)**5
-            
-            xb = r * np.cos(theta)
-            yb = r * np.sin(theta)
-            
-            scale = (p * 0.95) / max(np.max(np.abs(xb)), np.max(np.abs(yb)))
-            
-            wing_outer = np.column_stack((cx + xb * scale, cy + yb * scale))
-            wing_inner = np.column_stack((cx + xb * scale * 0.6, cy + yb * scale * 0.6))
+            for (kx, ky) in corners:
+                r_dist = np.sqrt(kx**2 + ky**2)
+                if abs(r_dist - max_radius_fit) < eps:
+                    contact_points.append({'x': kx, 'y': ky, 'pair': (p, q)})
+                elif r_dist > max_radius_fit:
+                    max_radius_fit = r_dist
+                    contact_points.clear()
+                    contact_points.append({'x': kx, 'y': ky, 'pair': (p, q)})
 
+            total_square_area += (W * W)
+
+            # --- GEOMETRI 'X' BONE & BUTTERFLY ---
+            t = half_w * 0.22
+            x_verts = np.array([
+                (half_w, half_w), (half_w-t, half_w), (0, t), (-half_w+t, half_w), (-half_w, half_w),
+                (-half_w, half_w-t), (-t, 0), (-half_w, -half_w+t), (-half_w, -half_w),
+                (-half_w+t, -half_w), (0, -t), (half_w-t, -half_w), (half_w, -half_w),
+                (half_w, -half_w+t), (t, 0), (half_w, half_w-t)
+            ])
+            x_verts[:, 0] += cx; x_verts[:, 1] += cy
+            
+            theta = np.linspace(0, 2*np.pi, 200)
+            # Fay's Butterfly Wing Parametric Function [cite: 57]
+            r_wing = np.exp(np.sin(theta)) - 2*np.cos(4*theta) + np.sin((2*theta - np.pi)/24)**5
+            xb, yb = r_wing * np.cos(theta), r_wing * np.sin(theta)
+            scale = (half_w * 0.95) / max(np.max(np.abs(xb)), np.max(np.abs(yb)))
+            
             polygons.append({
                 'x_verts': x_verts,
-                'wing_outer': wing_outer,
-                'wing_inner': wing_inner,
-                'cx': cx, 'cy': cy, 'p': p, 'label': label
+                'wing_outer': np.column_stack((cx + xb * scale, cy + yb * scale)),
+                'wing_inner': np.column_stack((cx + xb * scale * 0.6, cy + yb * scale * 0.6)),
+                'cx': cx, 'cy': cy, 'p': p, 'W': W, 'label': label
             })
 
-        # 4. Apply Central Point Symmetry (-x, -y) with Butterfly Diagonal in label
         if is_central:
-            place_item(best_x, best_y, f"({p},{p})\nd=0\nDg={diag_val:.1f}")
+            place_item(best_x, best_y, f"({p},{p})\nd=0")
         else:
-            place_item(best_x, best_y, f"({p},{q})\nd={d}\nDg={diag_val:.1f}")
-            place_item(-best_x, -best_y, f"({q},{p})\nd={d}\nDg={diag_val:.1f}")
+            place_item(best_x, best_y, f"({p},{q})\nd={d}")
+            place_item(-best_x, -best_y, f"({q},{p})\nd={d}")
             
-    return polygons, max_radius_fit
+    return polygons, max_radius_fit, total_square_area, contact_points
 
 def plot_fractal_goldbach_crystal(n):
     if n % 2 != 0: n -= 1
-    if n < 4:
-        print("n must be an even number >= 4")
-        return
-        
     primes = set(get_primes_up_to(n))
     groups = get_symmetric_groups(n, primes)
-
-    if not groups: 
-        print(f"No Goldbach partitions for n={n}")
-        return
+    if not groups: return
 
     m = n // 2
     plt.style.use('dark_background')
-    
-    # Wider window ratio to accommodate Text Panel UI
     fig, ax = plt.subplots(figsize=(16, 10))
     ax.set_aspect('equal')
 
-    polygons_data, R_fit = calculate_crystal_packing(groups)
-
-    # Universe Circle
-    circle = plt.Circle((0, 0), R_fit, color='cyan', fill=False, lw=1.5, alpha=0.5, linestyle='-')
-    ax.add_patch(circle)
+    polygons_data, R_fit, total_sq_area, contacts = calculate_crystal_packing(groups)
     
-    ax.axhline(0, color='white', lw=0.4, alpha=0.3, linestyle='--')
-    ax.axvline(0, color='white', lw=0.4, alpha=0.3, linestyle='--')
+    # Metrik Cakupan Ruang 
+    universe_area = np.pi * (R_fit**2)
+    coverage_ratio = (total_sq_area / universe_area) * 100 if universe_area > 0 else 0
 
-    cmap_wing = plt.get_cmap('turbo')   
-    cmap_core = plt.get_cmap('magma')   
+    # Universe Circle & Axis
+    ax.add_patch(plt.Circle((0, 0), R_fit, color='cyan', fill=False, lw=1.5, alpha=0.5))
+    ax.axhline(0, color='white', lw=0.4, alpha=0.3, ls='--')
+    ax.axvline(0, color='white', lw=0.4, alpha=0.3, ls='--')
 
-    for poly_data in polygons_data:
-        p, cx, cy = poly_data['p'], poly_data['cx'], poly_data['cy']
+    cmap_wing = plt.get_cmap('turbo')
+    for poly in polygons_data:
+        p, cx, cy, w_val = poly['p'], poly['cx'], poly['cy'], poly['W']
         
-        ratio = p / m if m > 0 else 0
+        # Render Sayap & Bone
+        ax.add_patch(plt.Polygon(poly['wing_outer'], facecolor=cmap_wing(p/m), alpha=0.7))
+        ax.add_patch(plt.Polygon(poly['wing_inner'], facecolor='orange', alpha=0.4))
+        ax.add_patch(plt.Polygon(poly['x_verts'], facecolor='white', alpha=0.2, edgecolor='cyan'))
         
-        # Draw Wing Layer
-        poly_out = plt.Polygon(poly_data['wing_outer'], facecolor=cmap_wing(ratio), edgecolor='none', alpha=0.7)
-        ax.add_patch(poly_out)
-        
-        poly_in = plt.Polygon(poly_data['wing_inner'], facecolor=cmap_core(1.0 - ratio), edgecolor='none', alpha=0.9)
-        ax.add_patch(poly_in)
-        
-        # Draw Bone
-        poly_x = plt.Polygon(poly_data['x_verts'], facecolor='white', edgecolor='cyan', lw=1.2, alpha=0.25)
-        ax.add_patch(poly_x)
-        
-        # Bounding Box
-        bbox = plt.Rectangle((cx - p, cy - p), 2*p, 2*p, 
-                             fill=False, edgecolor='white', lw=0.5, alpha=0.2, linestyle=':')
-        ax.add_patch(bbox)
-        
-        # Label with new details
-        fontsize = max(4, int((p / m) * 10)) if m > 0 else 6
-        ax.text(cx, cy, poly_data['label'], 
-                color='white', ha='center', va='center', 
-                fontsize=fontsize, fontweight='bold', alpha=1.0,
-                path_effects=[pe.withStroke(linewidth=2.5, foreground="black")])
+        # Gambar Persegi (Bounding Box) yang Anda sukai
+        ax.add_patch(plt.Rectangle((cx - w_val/2, cy - w_val/2), w_val, w_val, 
+                                   fill=False, edgecolor='white', lw=0.6, alpha=0.3, ls=':'))
 
-    padding_view = R_fit * 1.05 if R_fit > 0 else 5
-    ax.set_xlim(-padding_view, padding_view)
-    ax.set_ylim(-padding_view, padding_view)
-    ax.axis('off')
+    # Visualisasi Titik Kontak
+    for cp in contacts:
+        angle = np.degrees(np.arctan2(cp['y'], cp['x']))
+        ax.plot(cp['x'], cp['y'], 'ro', markersize=5)
+        ax.annotate(f"{angle:.1f}°", (cp['x'], cp['y']), color='red', fontsize=8, fontweight='bold')
 
-    plt.title(f"Butterfly Crystal Map of Goldbach Decomposition\n$n = {n}, \\quad m = {m}$", 
-              color='gold', fontsize=18, pad=20, fontweight='bold')
-              
-    ax.text(0, -padding_view * 0.98, f"Deterministic Circular Tangent Packing (0 Gap)\nStructure: 'X' Skeleton with Fay's Butterfly Wings", 
-            color='cyan', ha='center', fontsize=12, alpha=0.8)
+    # PANEL INFORMASI YANG DIPERKAYA
+    contact_info = ""
+    for i, cp in enumerate(contacts[:3]): # Ambil 3 titik pertama
+        angle = np.degrees(np.arctan2(cp['y'], cp['x']))
+        contact_info += f"Contact {i+1}: ({cp['x']:.1f}, {cp['y']:.1f}) @ {angle:.1f}°\n"
 
-    # ================= ACCURATE INFORMATION PANEL =================
-    d_vals = [g['d'] for g in groups]
-    p_vals = [g['p'] for g in groups]
-    
     info_text = (
-        f" GOLDBACH ANALYSIS INFORMATION\n"
+        f" GOLDBACH STRUCTURAL ANALYSIS\n"
         f" {'='*34}\n"
-        f" n Value (Even)   : {n}\n"
-        f" Midpoint (m)    : {m}\n"
-        f" Total Pairs     : {len(groups)}\n"
+        f" n Value : {n} | Midpoint: {m}\n"
+        f" Total Pairs: {len(groups)}\n"
         f" {'='*34}\n\n"
         f" UNIVERSE CIRCLE GEOMETRY\n"
         f" {'='*34}\n"
-        f" Radius (R)       : {R_fit:.4f}\n"
-        f" Diameter (D)    : {(2 * R_fit):.4f}\n"
-        f" Circumference   : {(2 * np.pi * R_fit):.4f}\n"
-        f" Circle Area     : {(np.pi * R_fit**2):.4f}\n"
+        f" Radius (R): {R_fit:.4f}\n"
+        f" Square Area: {total_sq_area:.2f}\n"
+        f" Coverage Ratio: {coverage_ratio:.2f}%\n"
         f" {'='*34}\n\n"
-        f" DISTANCE & BUTTERFLY DIAGONAL ANALYSIS\n"
+        f" SYMMETRIC CONTACT POINTS\n"
         f" {'='*34}\n"
-        f" Distance (d) Min/Max : {min(d_vals)} / {max(d_vals)}\n"
-        f" Distance (d) Average : {(sum(d_vals)/len(d_vals)):.2f}\n\n"
-        f" Main Wing Min (p)   : {min(p_vals)}\n"
-        f" Main Wing Max (p)   : {max(p_vals)}\n"
-        f" Diagonal (Dg) Min    : {(2 * min(p_vals) * np.sqrt(2)):.4f}\n"
-        f" Diagonal (Dg) Max    : {(2 * max(p_vals) * np.sqrt(2)):.4f}\n"
+        f"{contact_info}"
         f" {'='*34}\n\n"
-        f" GEOMETRIC MEANING IN GOLDBACH\n"
+        f" ANALYTICAL INSIGHT\n"
         f" {'='*34}\n"
-        f" - Distance (d): Prime deviation from m.\n"
-        f" - Diagonal (Dg): Absolute wing span\n"
-        f"   representing prime p energy.\n"
-        f" - Diameter (D): Total probability area\n"
-        f"   of all n partitions.\n"
-        f" - 0-Gap: Crystal fractal consistency.\n\n"
-        f" PAIR DETAILS (p, q):\n"
-        f" {'-'*34}\n"
+        f" Persegi yang menyentuh\n"
+        f" lingkaran berasal dari\n"
+        f" pasangan: {contacts[0]['pair']}\n"
+        f" {'='*34}\n"
     )
     
-    # Display up to 12 pairs in panel table
-    for idx, g in enumerate(groups):
-        p, q, d = g['p'], g['q'], g['d']
-        diag = 2 * p * np.sqrt(2)
-        if idx < 12:
-            info_text += f"[{idx+1:02d}] ({p:^4}, {q:^4}) | d={d:<4} | Dg={diag:.1f}\n"
-        elif idx == 12:
-            info_text += f" ... and {len(groups) - 12} more pairs\n"
-            break
-            
-    # Create Panel TextBox on the left side using absolute figure coordinates
-    fig.text(0.015, 0.5, info_text, 
-             fontsize=10, color='white', va='center', ha='left',
-             family='monospace',
-             bbox=dict(facecolor='#0a192f', alpha=0.85, edgecolor='#00ffcc', boxstyle='round,pad=1', lw=1.5))
-    # ==========================================================
+    fig.text(0.015, 0.5, info_text, fontsize=9, color='white', va='center', family='monospace',
+             bbox=dict(facecolor='#0a192f', alpha=0.85, edgecolor='#00ffcc', boxstyle='round', lw=1.5))
 
-    # Use rect in tight_layout to leave empty space on the left for main plot
+    plt.title(f"Butterfly Crystal Analysis: Goldbach Symmetry (n={n})", color='gold', fontsize=16)
+    plt.axis('off')
     plt.tight_layout(rect=[0.26, 0.0, 1.0, 1.0])
     plt.show()
+
 
 def main():
     root = tk.Tk()
