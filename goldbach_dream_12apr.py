@@ -142,4 +142,4 @@ def plot_goldbach_crystal(n):
 
 if __name__ == "__main__":
     # Test dengan n=10 untuk membuktikan perbaikan, lalu coba n=4034
-    plot_goldbach_crystal(4034)
+    plot_goldbach_crystal(20)
